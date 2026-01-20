@@ -3,16 +3,16 @@ import threading
 from datetime import datetime   #need this for syncing with pc clock
 import settings
 
-_keys = {
+_KEYS = {
     "sec": 0,   
     "min": 1,   
     "hour": 2,  
     "day": 3,
     "year": 4,
-    }
-_curr_time = [0, 0, 0, 0, 0]
-_consts = [60, 60, 24, 365]
-_months = {
+}
+_current_time = [0, 0, 0, 0, 0]
+_CONSTS = [60, 60, 24, 365]
+_MONTH_OFFSETS = {
     1: 0,
     2: 31,
     3: 59,
@@ -27,7 +27,7 @@ _months = {
     12: 334,
     13: 366,
 }
-_settingsDict = {
+_SETTINGS_DICT = {
     "default_time": [0, 0, 0, 0, 0],
     "tickInterval": 1,
     "syncOnStart": False,
@@ -35,251 +35,269 @@ _settingsDict = {
     "doUnitTests": False,
     "startCounting": False
 }
-
 _isTicking = False
 
-def initializer():
-    global _settingsDict
-    _settingsDict = settings.settingsDict
-    _t.start()
-    if _settingsDict["startCounting"]:
-        startTicking()
-    if _settingsDict["syncOnStart"]:
-        syncTime()
+def initializer() -> None:
+    global _SETTINGS_DICT
+    _SETTINGS_DICT = settings.settingsDict
+    _ticking_thread.start()
+    if _SETTINGS_DICT["startCounting"]:
+        start_ticking()
+    if _SETTINGS_DICT["syncOnStart"]:
+        sync_time()
+    _log(0, "None")
+    return None
 
-def syncTime():
+def sync_time() -> None:
     _log(1, "syncTime")
-    global _curr_time
+    global _current_time
     now = datetime.now()
-    _curr_time[0] = now.second
-    _curr_time[1] = now.minute
-    _curr_time[2] = now.hour
-    _curr_time[3] = now.day + _months[now.month]
-    _curr_time[4] = now.year
+    _current_time[0] = now.second
+    _current_time[1] = now.minute
+    _current_time[2] = now.hour
+    _current_time[3] = now.day + _MONTH_OFFSETS[now.month]
+    _current_time[4] = now.year
+    _log(0, "None")
+    return None
 
-def getTime(tip: str):
+def get_time(tip: str) -> int or list:
     _log(1, "getTime")
     if tip == "all":
-        _log(0, str(_curr_time.copy))
-        return _curr_time.copy()
+        _log(0, str(_current_time.copy))
+        return _current_time.copy()
     elif tip == "dom":
-        var17 = _getDay()
+        var17 = _get_day()
         _log(0, str(var17))
         return var17
     elif tip == "month":
-        var18 = _getMonth()
+        var18 = _get_month()
         _log(0, str(var18))
         return var18
     else:
         try:
-            _log(0, str(_curr_time[_keys[tip]]))
-            return _curr_time[_keys[tip]]
+            _log(0, str(_current_time[_KEYS[tip]]))
+            return _current_time[_KEYS[tip]]
         except KeyError:
-            _log(-1, "KeyError")
+            _log(-1, "KeyError in get_time")
             raise KeyError(f"{tip} is not a valid unit of time")
 
-def setTime(newTime: list[int]):
+def set_time(newTime: list[int]) -> None:
     _log(1, "setTime")
-    global _curr_time
+    global _current_time
     if len(newTime) != 5:
-        _log(-1, "Exception")
+        _log(-1, "Exception in set_time")
         raise Exception("List provided is too big (bigger than 5)")
-    _curr_time = newTime
+    _current_time = newTime
+    _log(0, "None")
+    return None
 
 def _tick():
     global _tickInterval
     while True:
-        time.sleep(_settingsDict["tickInterval"])
+        time.sleep(_SETTINGS_DICT["tickInterval"])
         if _isTicking:
-            increaseTime("sec", 1)
+            increase_time("sec", 1)
+_ticking_thread = threading.Thread(target=_tick, daemon=True)
 
-_t = threading.Thread(target=_tick, daemon=True)
-
-def increaseTime(tip: str, amount: int):
+def increase_time(tip: str, amount: int) -> None:
     _log(1, "increaseTime")
     if amount < 0:
-        _log(-1, "ValueError")
+        _log(-1, "ValueError in increase_time")
         raise ValueError("The value has to be bigger then zero")
     try:
-        _curr_time[_keys[tip]] += amount
+        _current_time[_KEYS[tip]] += amount
     except KeyError:
-        _log(-1, "KeyError")
-        raise KeyError("Invalid Key!!!!!")
+        _log(-1, "KeyError in increase_time")
+        raise KeyError("Invalid Key")
     _normalize()
+    _log(0, "None")
+    return None
 
-def startTicking():
+def start_ticking() -> None:
     _log(1, "startTicking")
     global _isTicking
     _isTicking = True
+    _log(0, "None")
+    return None
 
-def stopTicking():
+def stop_ticking() -> None:
     _log(1, "stopTicking")
     global _isTicking
     _isTicking = False
+    _log(0, "None")
+    return None
 
 def convert(convertFrom: int, fromType: str, convertTo: str) -> int:
     _log(1, "convert")
     try:
         converted = convertFrom
-        if _keys[fromType] < _keys[convertTo]:
-            for i in range(_keys[fromType], _keys[convertTo]):
-                converted /= _consts[i]
-        elif _keys[fromType] > _keys[convertTo]:
-            for i in range(_keys[convertTo], _keys[fromType]):
-                converted *= _consts[i]
-        elif _keys[fromType] == _keys[convertTo]:
+        if _KEYS[fromType] < _KEYS[convertTo]:
+            for i in range(_KEYS[fromType], _KEYS[convertTo]):
+                converted /= _CONSTS[i]
+        elif _KEYS[fromType] > _KEYS[convertTo]:
+            for i in range(_KEYS[convertTo], _KEYS[fromType]):
+                converted *= _CONSTS[i]
+        elif _KEYS[fromType] == _KEYS[convertTo]:
             _log(0, str(converted))
             return convertFrom
     except KeyError:
-        _log(-1, "KeyError")
+        _log(-1, "KeyError in convert")
         raise KeyError(f"Either {fromType} or {convertTo} is an invalid time unit")
     _log(0, str(converted))
     return converted
 
-def _getDay():
+def _get_day() -> int:
     _log(1, "_getDay")
-    month = _getMonth()
-    day = _curr_time[3] - _months[month]
+    month = _get_month()
+    day = _current_time[3] - _MONTH_OFFSETS[month]
     _log(0, str(day))
     return day
 
-def _log(code: int, additional_info: str):
-    s = _curr_time[0]
-    mi = _curr_time[1]
-    ho = _curr_time[2]
-    mon = -1
+def _log(code: int, additional_info: str) -> None:
+    # Get the time to put into the log
+    seconds = _current_time[0]
+    minutes = _current_time[1]
+    hours = _current_time[2]
+    month = -1
     for a in range(1, 13):
-        if _months[a] < _curr_time[3] and _curr_time[3] <= _months[a + 1]:
-            mon = a
-    if mon != -1:
-        da = _curr_time[3] - _months[mon]
+        if _MONTH_OFFSETS[a] < _current_time[3] and _current_time[3] <= _MONTH_OFFSETS[a + 1]:
+            month = a
+    if month != -1:
+        day = _current_time[3] - _MONTH_OFFSETS[month]
     else:
-        da = -1
-    ye = _curr_time[4]
+        day = -1
+    year = _current_time[4]
+    # Use with to automatically close the file
     with open("log.txt", "a") as log_file:
-        if code == 1:
-            log_file.write(f"{ho}:{mi}:{s}, {da}/{mon}/{ye}, " + f"Executing {additional_info}\n")
-        elif code == 0:
-            log_file.write(f"{ho}:{mi}:{s}, {da}/{mon}/{ye}, " + f"Function returned: {additional_info}\n")
-        elif code == -1:
-            log_file.write(f"{ho}:{mi}:{s}, {da}/{mon}/{ye}, " + f"Function raised: {additional_info}\n")
+        if code == 1:           # 1 means a function is called
+            log_file.write(f"{hours}:{minutes}:{seconds}, {day}/{month}/{year}, " + f"Executing {additional_info}\n")
+        elif code == 0:         # 0 means the function finished correctly and returned a value
+            log_file.write(f"{hours}:{minutes}:{seconds}, {day}/{month}/{year}, " + f"Function returned: {additional_info}\n")
+        elif code == -1:        # -1 means that an error was raised
+            log_file.write(f"{hours}:{minutes}:{seconds}, {day}/{month}/{year}, " + f"Function raised: {additional_info}\n")
+    return None
 
-def _getMonth():
+def _get_month() -> int:
     _log(1, "_getMonth")
     month = 13
-    if _curr_time[3] < 0 or _curr_time[3] > 366:
-        _log(-1, "ValueError")
+    if _current_time[3] < 0 or _current_time[3] > 366:
+        _log(-1, "ValueError in _get_month")
         raise ValueError("Internal error happened")
     for k in range(1, 13):
-        if _months[k] < _curr_time[3] and _curr_time[3] <= _months[k + 1]:
+        if _MONTH_OFFSETS[k] < _current_time[3] and _current_time[3] <= _MONTH_OFFSETS[k + 1]:
             month = k
     _log(0, str(month))
     return month
 
-def decreaseTime(tip: str, amount: int):
+def __decrease_time(tip: str, amount: int) -> None:
+    _log(1, "__decrease_time")
+    # Not finished. Should not be used.
+    # TODO: fix
     try:
-        _curr_time[_keys[tip]] -= amount
-        while _curr_time[_keys[tip]] < 0:
-            _curr_time[_keys[tip] + 1] -= 1
-            _curr_time[_keys[tip]] += _consts[_keys[tip]]
-        while _curr_time[_keys[tip] + 1] < 0:
-            _curr_time[_keys[tip] + 2] -= 1
-            _curr_time[_keys[tip] + 1] += _consts[_keys[tip] + 1]
-        while _curr_time[_keys[tip] + 2] < 0:
-            _curr_time[_keys[tip] + 3] -= 1
-            _curr_time[_keys[tip] + 2] += _consts[_keys[tip] + 2]
+        _current_time[_KEYS[tip]] -= amount
+        while _current_time[_KEYS[tip]] < 0:
+            _current_time[_KEYS[tip] + 1] -= 1
+            _current_time[_KEYS[tip]] += _CONSTS[_KEYS[tip]]
+        while _current_time[_KEYS[tip] + 1] < 0:
+            _current_time[_KEYS[tip] + 2] -= 1
+            _current_time[_KEYS[tip] + 1] += _CONSTS[_KEYS[tip] + 1]
+        while _current_time[_KEYS[tip] + 2] < 0:
+            _current_time[_KEYS[tip] + 3] -= 1
+            _current_time[_KEYS[tip] + 2] += _CONSTS[_KEYS[tip] + 2]
 
     except KeyError:
+        _log(-1, "KeyError in __decrease_time")
         raise KeyError(f"{tip} is not a supported unit of time")
     except IndexError:
+        _log(-1, "IndexError in __decrease_time")
         raise IndexError("Minutes, seconds and hours allowed")
     _normalize()
+    _log(0, "None")
+    return None
 
-def printNicely():
-    print("Seconds: " + str(_curr_time[0]) + ", Minutes: " + str(_curr_time[1]) + ", Hours: " + str(_curr_time[2]) + ", Days: " + str(_curr_time[3]) + ", Years: " + str(_curr_time[4]))
+def print_nicely() -> None:
+    print("Seconds: " + str(_current_time[0]) +
+          ", Minutes: " + str(_current_time[1]) +
+          ", Hours: " + str(_current_time[2]) +
+          ", Days: " + str(_current_time[3]) +
+          ", Years: " + str(_current_time[4])
+          )
+    _log(0, "None")
+    return None
 
-def returnClkStyle() -> str:
-    day = _getDay()
-    month = _getMonth()
-    timeNow = (str(_curr_time[_keys["hour"]]) + ":" +
-        str(_curr_time[_keys["min"]]) + ":" +
-        str(_curr_time[_keys["sec"]]) + ", " +
-        str(day) + "/" +
-        str(month) + "/" +
-        str(_curr_time[_keys["year"]]))
+def return_clk_style() -> str:
+    _log(1, "return_clk_style")
+    day = _get_day()
+    month = _get_month()
+    timeNow = (str(_current_time[_KEYS["hour"]]) + ":" +
+               str(_current_time[_KEYS["min"]]) + ":" +
+               str(_current_time[_KEYS["sec"]]) + ", " +
+               str(day) + "/" +
+               str(month) + "/" +
+               str(_current_time[_KEYS["year"]]))
+    _log(0, timeNow)
     return timeNow
 
-def _normalize():
+def _normalize() -> None:
     for i in range(0, 4):
-        if _curr_time[i] >= _consts[i]:
-            _curr_time[i] -= _consts[i]
-            _curr_time[i + 1] += 1
+        if _current_time[i] >= _CONSTS[i]:
+            _current_time[i] -= _CONSTS[i]
+            _current_time[i + 1] += 1
             _normalize()
+    _log(0, "None")
+    return None
 
-def changeSettings(name: str, value):
+def change_settings(name: str, value) -> None:
     _log(1, "changeSettings")
-    if value == "True" and name != "tickInterval":
-        value = True
-    elif value == "False" and name != "tickInterval":
-        value = False
-    elif name == "default_time":
-        try:
-            value = list(value)
-        except ValueError:
-            _log(-1, "ValueError")
-            raise ValueError(f"{value} is not a valid default time")
-    else:
-        try:
-            value = float(value)
-        except ValueError:
-            _log(-1, "ValueError")
-            raise ValueError(f"{name} is an invalid value for any setting")
     try:
-        _settingsDict[name] = value
+        _SETTINGS_DICT[name] = value
     except KeyError:
         _log(-1, "KeyError")
         raise KeyError(f"{name} does not exists as a settings")
     with open("settings.py", "w") as f:
-        f.write("settingsDict = " + str(_settingsDict))
+        f.write("settingsDict = " + str(_SETTINGS_DICT))
+    _log(0, "None")
+    return None
 
 
+# This is a basic CLI built into the library itself - used for quick tests
 if __name__ == "__main__":
     initializer()
-    if _settingsDict["doUnitTests"]:
+    if _SETTINGS_DICT["doUnitTests"] == True:
         overall_pass = True
         passed1 = True
         for i in range(0, 1250):
-            increaseTime("sec", 1000)
+            increase_time("sec", 1000)
         for a in range(0, 4):
-            if _curr_time[a] < _consts[a] and _curr_time[a] >= 0:
+            if _current_time[a] < _CONSTS[a] and _current_time[a] >= 0:
                 pass
             else:
                 passed1, overall_pass = False, False
         passed2 = True
         i = 0
         for i in range(0, 1200):
-            decreaseTime("sec", 1)
+            __decrease_time("sec", 1)
         for a in range(0, 4):
-            if _curr_time[a] < _consts[a] and _curr_time[a] >= 0:
+            if _current_time[a] < _CONSTS[a] and _current_time[a] >= 0:
                 pass
             else:
                 passed2, overall_pass = False, False
 
         passed3 = True
-        _curr_time[3] = -1
-        month = _getMonth()
+        _current_time[3] = -1
+        month = _get_month()
         if month != None:
             passed3, overall_pass = False, False
 
         passed4 = True
-        _curr_time[3] = 370
-        month = _getMonth()
+        _current_time[3] = 370
+        month = _get_month()
         if month != None:
             passed4, overall_pass = False, False
 
         passed5 = True
-        _curr_time[3] = 200
-        day = _getDay()
+        _current_time[3] = 200
+        day = _get_day()
         if day != 19:
             passed5, overall_pass = False, False
 
@@ -306,7 +324,7 @@ if __name__ == "__main__":
         if not passed9:
             overall_pass = False
 
-        if _settingsDict["showTestOutput"]:
+        if _SETTINGS_DICT["showTestOutput"] == True:
             print("*** START OF UNIT TESTS ***")
 
             print("Test 1 passed") if passed1 == True else print("Test 1 failed")
@@ -322,13 +340,13 @@ if __name__ == "__main__":
 
             print("*** END OF UNIT TESTS ***")
 
-    if not _settingsDict["doUnitTests"]:
+    if _SETTINGS_DICT["doUnitTests"] == False:
         overall_pass = True
 
-    if _settingsDict["syncOnStart"]:
-        syncTime()
+    if _SETTINGS_DICT["syncOnStart"] == True:
+        sync_time()
 
-    while overall_pass:
+    while overall_pass == True:
         try:
             ui = input("> ")
         except KeyboardInterrupt:
@@ -336,28 +354,27 @@ if __name__ == "__main__":
     Terminating program...""")
             break
         if ui == "print":
-            printNicely()
+            print_nicely()
         elif ui == "increaseTime":
-            increaseTime(input("type: "), int(input("amount: ")))
+            increase_time(input("type: "), int(input("amount: ")))
         elif ui == "decreaseTime":
-            decreaseTime(input("type: "), int(input("amount: ")))
+            __decrease_time(input("type: "), int(input("amount: ")))
         elif ui == "exit":
             break
         elif ui == "":
             pass
         elif ui == "sync":
-            syncTime()
+            sync_time()
         elif ui == "clk":
-            printClkStyle()
+            print(return_clk_style())
         elif ui == "startt":
-            startTicking()
+            start_ticking()
         elif ui == "stopt":
-            stopTicking()
+            stop_ticking()
         elif ui == "convert":
             var3 = convert(int(input("enter value ")), input("from "), input("to "))
             print("result:", var3)
         elif ui == "change":
-            changeSettings(input(), input())
+            change_settings(input(), input())
         else:
-
-            print("Not a command, dumbass")
+            print("Not a command")
