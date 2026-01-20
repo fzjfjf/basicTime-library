@@ -177,24 +177,17 @@ def _getMonth():
     return month
 
 def decreaseTime(tip: str, amount: int):
-    #NOT FINISHED!!! DONT USE YET
-    #AND IF YOU ARE GOING TO USE IT, USE IT ONLY WITH SECONDS, MINUTES AND HOURS TO MAKE SURE YOU DONT GET INDEX ERROR
-    #I KNOW ITS SHIT, JUST MOVE ON, OR FIX IT YOURSELF (if you are going to fix it, seek help)
     try:
         _curr_time[_keys[tip]] -= amount
-#        print(curr_time)
         while _curr_time[_keys[tip]] < 0:
             _curr_time[_keys[tip] + 1] -= 1
             _curr_time[_keys[tip]] += _consts[_keys[tip]]
-#            print(curr_time)
         while _curr_time[_keys[tip] + 1] < 0:
             _curr_time[_keys[tip] + 2] -= 1
             _curr_time[_keys[tip] + 1] += _consts[_keys[tip] + 1]
-#            print(curr_time)
         while _curr_time[_keys[tip] + 2] < 0:
             _curr_time[_keys[tip] + 3] -= 1
             _curr_time[_keys[tip] + 2] += _consts[_keys[tip] + 2]
-#            print(curr_time)
 
     except KeyError:
         raise KeyError(f"{tip} is not a supported unit of time")
@@ -366,4 +359,5 @@ if __name__ == "__main__":
         elif ui == "change":
             changeSettings(input(), input())
         else:
+
             print("Not a command, dumbass")
