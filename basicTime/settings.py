@@ -1,0 +1,1 @@
+settingsDict = {'default_time': [0, 1, 2, 3, 4], 'tickInterval': 1, 'syncOnStart': False, 'showTestOutput': False, 'doUnitTests': False, 'startCounting': False}
