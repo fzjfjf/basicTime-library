@@ -40,6 +40,112 @@ _SETTINGS_DICT = {                  # Contains setting names, this is a fallback
 }
 _isTicking = False
 
+class Clock:
+    FUNCTION_RAN = 1  # Used for _log() instead of magic numbers
+    FUNCTION_RETURNED = 0
+    FUNCTION_RAISED = -1
+    _CONSTS = [60, 60, 24, 365]
+    _MONTH_OFFSETS = {
+        1: 0,
+        2: 31,
+        3: 59,
+        4: 90,
+        5: 120,
+        6: 151,
+        7: 181,
+        8: 212,
+        9: 243,
+        10: 273,
+        11: 304,
+        12: 334,
+        13: 366,
+    }
+    _KEYS = {  # Contains index positions of the units. Made for easier use of current_time.
+        "sec": 0,
+        "min": 1,
+        "hour": 2,
+        "day": 3,
+        "year": 4,
+    }
+
+    def __init__(self):
+        self._current_time = [0, 0, 0, 0, 0]
+        self._SETTINGS_DICT = {
+            "default_time": [0, 0, 0, 0, 0],
+
+            "tickInterval": 1,
+            "syncOnStart": False,
+            "showTestOutput": False,
+            "doUnitTests": False,
+            "startCounting": False
+        }
+        self._ticking_thread = threading.Thread(
+            target=self._tick,
+            daemon=True
+        )
+        self._isTicking = False
+        self._ticking_thread.start()
+
+    def _tick(self):
+        while True:
+            time.sleep(self._SETTINGS_DICT["tickInterval"])
+            if self._isTicking:
+                self.increase_time("sec", 1)
+
+    def _log(self, code: int, additional_info: str) -> None:
+        # Logs time and name of function that ran, value function returned or error the function exited with
+        # Get the time to put into the log
+        seconds = self._current_time[0]
+        minutes = self._current_time[1]
+        hours = self._current_time[2]
+        month = -1
+        for a in range(1, 13):
+            if (self._MONTH_OFFSETS[a] < self._current_time[3] and
+                self._current_time[3] <= self._MONTH_OFFSETS[a + 1]):
+                month = a
+        if month != -1:
+            day = self._current_time[3] - self._MONTH_OFFSETS[month]
+        else:
+            day = -1
+        year = self._current_time[4]
+        # Use with to automatically close the file
+        with open("log.txt", "a") as log_file:
+            if code == 1:  # 1 means a function is called
+                log_file.write(
+                    f"{hours}:{minutes}:{seconds}, {day}/{month}/{year}, " + f"Executing {additional_info}\n")
+            elif code == 0:  # 0 means the function finished correctly and returned a value
+                log_file.write(
+                    f"{hours}:{minutes}:{seconds}, {day}/{month}/{year}, " + f"Function returned: {additional_info}\n")
+            elif code == -1:  # -1 means that an error was raised
+                log_file.write(
+                    f"{hours}:{minutes}:{seconds}, {day}/{month}/{year}, " + f"Function raised: {additional_info}\n")
+        return None
+
+    def increase_time(self, unit_type: str, amount: int) -> None:
+        # Gives the developer ability to increase time easily.
+        # Overflow is automatically converted.
+        # Negative amounts are not allowed.
+        self._log(self.FUNCTION_RAN, "increaseTime")
+        if amount < 0:
+            self._log(self.FUNCTION_RAISED, f"ValueError in increase_time, amount = {amount}  unit_type = {unit_type}")
+            raise ValueError("The value has to be bigger than zero")
+        try:
+            self._current_time[self._KEYS[unit_type]] += amount
+        except KeyError:
+            self._log(self.FUNCTION_RAISED, f"KeyError in increase_time, unit_type = {unit_type}  amount = {amount}")
+            raise KeyError(f"{unit_type} is an invalid unit of time")
+        self._normalize()
+        self._log(self.FUNCTION_RETURNED, "None")
+        return None
+
+    def _normalize(self) -> None:
+        for i in range(0, 4):
+            while self._current_time[i] >= self._CONSTS[i]:
+                self._current_time[i] -= self._CONSTS[i]
+                self._current_time[i+1] += 1
+        return None
+
+
 def initializer() -> None:
     # Takes the settings dictionary from settings.py and sets _SETTINGS_DICT equal to itself.
     # Also checks for startCounting setting and syncOnStart settings and does the action needed for them
@@ -173,7 +279,8 @@ def _log(code: int, additional_info: str) -> None:
     hours = _current_time[2]
     month = -1
     for a in range(1, 13):
-        if _MONTH_OFFSETS[a] < _current_time[3] and _current_time[3] <= _MONTH_OFFSETS[a + 1]:
+        if (_MONTH_OFFSETS[a] < _current_time[3] and
+            _current_time[3] <= _MONTH_OFFSETS[a + 1]):
             month = a
     if month != -1:
         day = _current_time[3] - _MONTH_OFFSETS[month]
@@ -204,7 +311,7 @@ def _get_month() -> int:
 
 def __decrease_time(unit_type: str, amount: int) -> None:
     _log(FUNCTION_RAN, "__decrease_time")
-    # Not finished. Should not be used.
+    # Not finished. Should not be used. I know, it is stupid
     # TODO: fix
     try:
         _current_time[_KEYS[unit_type]] -= amount
@@ -225,17 +332,6 @@ def __decrease_time(unit_type: str, amount: int) -> None:
         _log(FUNCTION_RAISED, f"IndexError in __decrease_time, unit_time = {unit_type}")
         raise IndexError("Only minutes, seconds and hours allowed")
     _normalize()
-    _log(FUNCTION_RETURNED, "None")
-    return None
-
-def print_nicely() -> None:
-    _log(FUNCTION_RAN, "print_nicely")
-    print("Seconds: " + str(_current_time[0]) +
-          ", Minutes: " + str(_current_time[1]) +
-          ", Hours: " + str(_current_time[2]) +
-          ", Days: " + str(_current_time[3]) +
-          ", Years: " + str(_current_time[4])
-          )
     _log(FUNCTION_RETURNED, "None")
     return None
 
@@ -335,7 +431,7 @@ if __name__ == "__main__":
             var2 = convert(10, "key", "another")
         except KeyError:
             passed9 = True
-        if not passed9:
+        if passed9 == False:
             overall_pass = False
 
         if _SETTINGS_DICT["showTestOutput"] == True:
@@ -368,7 +464,8 @@ if __name__ == "__main__":
     Terminating program...""")
             break
         if ui == "print":
-            print_nicely()
+            pass
+            #print_nicely()
         elif ui == "increaseTime":
             increase_time(input("type: "), int(input("amount: ")))
         elif ui == "decreaseTime":
