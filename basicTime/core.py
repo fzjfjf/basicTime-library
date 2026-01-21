@@ -37,10 +37,10 @@ class Clock:
     }
 
     def __init__(self):
+        # These are defaults for the clock
         self._current_time = [0, 0, 0, 0, 0]
         self._SETTINGS_DICT = {
             "default_time": [0, 0, 0, 0, 0],
-
             "tickInterval": 1,
             "syncOnStart": False,
             "showTestOutput": False,
@@ -51,8 +51,8 @@ class Clock:
             target=self._tick,
             daemon=True
         )
-        self._isTicking = False
         self._ticking_thread.start()
+        self._isTicking = False
 
     def _tick(self):
         while True:
@@ -179,7 +179,7 @@ class Clock:
              requested_time_unit (str):
         """
         # The main way of getting time from the library.
-        self._log(FUNCTION_RAN, "getTime")
+        self._log(self.FUNCTION_RAN, "getTime")
         if requested_time_unit == "all":
             requested_time = self._current_time.copy()
         elif requested_time_unit == "dom":
@@ -196,16 +196,35 @@ class Clock:
         return requested_time
 
     def set_time(self, newTime: list[int]) -> None:
+        """
+        Gives the developer an easy way to set a custom time while the program is runnning
+
+        Parameters:
+            newTime (list[int]): a list of 5 integers with the new time
+
+        Notes:
+            - Exception will be raised if the lenght of the list is not five
+            - New time is automatically normalized
+            - Negative values are not supported
+        """
         # Gives the developer ability to set a custom time if needed.
         self._log(self.FUNCTION_RAN, "setTime")
+        for i in range(0, 5):
+            if newTime[i] < 0:
+                self._log(self.FUNCTION_RAISED, f"ValueError in set_time, newTime = {newTime}")
+                raise ValueError("The new time provided contains a negative value")
         if len(newTime) != 5:
             self._log(self.FUNCTION_RAISED, "Exception in set_time")
-            raise Exception("List provided is too big (bigger than 5)")
+            raise Exception("List provided is not the right size (5)")
         self._current_time = newTime
+        self._normalize()
         self._log(self.FUNCTION_RETURNED, "None")
         return None
 
     def start_ticking(self) -> None:
+        """
+        Easy way to start ticking the clock
+        """
         # Gives the dev an easy way to start ticking the clock.
         self._log(self.FUNCTION_RAN, "startTicking")
         self._isTicking = True
@@ -213,6 +232,9 @@ class Clock:
         return None
 
     def stop_ticking(self) -> None:
+        """
+        Easy way to stop the clock
+        """
         # Gives the dev an easy way to stop ticking the clock.
         self._log(self.FUNCTION_RAN, "stopTicking")
         self._isTicking = False
@@ -276,7 +298,7 @@ class Clock:
         self._log(self.FUNCTION_RAN, "_getMonth")
         month = 13
         if self._current_time[3] < 0 or self._current_time[3] > 366:
-            self._log(self.FUNCTION_RAISED, f"ValueError in _get_month, _current_time = {_current_time}")
+            self._log(self.FUNCTION_RAISED, f"ValueError in _get_month, _current_time = {self._current_time}")
             raise ValueError("Internal error happened")
         for k in range(1, 13):
             if (self._MONTH_OFFSETS[k] < self._current_time[3] and
