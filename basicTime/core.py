@@ -3,44 +3,12 @@ import threading
 from datetime import datetime   #need this for syncing with pc clock
 import settings
 
-FUNCTION_RAN = 1            # Used for _log() instead of magic numbers
-FUNCTION_RETURNED = 0
-FUNCTION_RAISED = -1
-_KEYS = {           # Contains index positions of the units. Made for easier use of current_time.
-    "sec": 0,   
-    "min": 1,   
-    "hour": 2,  
-    "day": 3,
-    "year": 4,
-}
-_current_time = [0, 0, 0, 0, 0]     # Heart of the library. Units are in this order: [sec, min, hour, day of year, year].
-_CONSTS = [60, 60, 24, 365]         # Lenght of every unit until rollover to the next.
-_MONTH_OFFSETS = {                  # Amount of days that have passed in a year before the month in the key
-    1: 0,
-    2: 31,
-    3: 59,
-    4: 90,
-    5: 120,
-    6: 151,
-    7: 181,
-    8: 212,
-    9: 243, 
-    10: 273,
-    11: 304,
-    12: 334,
-    13: 366,
-}
-_SETTINGS_DICT = {                  # Contains setting names, this is a fallback if initializer() is not run.
-    "default_time": [0, 0, 0, 0, 0],# Same settings are stored in the file named settings.py. Those settings need to be
-    "tickInterval": 1,              # stored externally to not reset everytime.
-    "syncOnStart": False,
-    "showTestOutput": False,
-    "doUnitTests": False,
-    "startCounting": False
-}
-_isTicking = False
-
 class Clock:
+    """
+    This module/class logs all function calls using self._log(FUNCTION_RAN/RAISED/RETURNED).
+    Each function automatically logs when it starts, when exceptions occur, and when it returns.
+    """
+
     FUNCTION_RAN = 1  # Used for _log() instead of magic numbers
     FUNCTION_RETURNED = 0
     FUNCTION_RAISED = -1
@@ -93,7 +61,12 @@ class Clock:
                 self.increase_time("sec", 1)
 
     def _log(self, code: int, additional_info: str) -> None:
-        # Logs time and name of function that ran, value function returned or error the function exited with
+        """
+        Used internally for logging purposes
+
+        Parameters:
+             code (int): determines
+        """
         # Get the time to put into the log
         seconds = self._current_time[0]
         minutes = self._current_time[1]
@@ -122,9 +95,14 @@ class Clock:
         return None
 
     def increase_time(self, unit_type: str, amount: int) -> None:
-        # Gives the developer ability to increase time easily.
-        # Overflow is automatically converted.
-        # Negative amounts are not allowed.
+        """
+        Adds amount to the unit specified by unit_type
+
+        Notes:
+             - amount can not be below zero, otherwise a ValueError is raised
+             - If unit_type does not exist, a KeyError will be raised
+             - Runs normalize at the end
+        """
         self._log(self.FUNCTION_RAN, "increaseTime")
         if amount < 0:
             self._log(self.FUNCTION_RAISED, f"ValueError in increase_time, amount = {amount}  unit_type = {unit_type}")
@@ -139,353 +117,244 @@ class Clock:
         return None
 
     def _normalize(self) -> None:
+        """
+        Takes _current_time and normalizes it
+
+        Notes:
+             - Does not work with negative values
+        """
+        self._log(self.FUNCTION_RAN, "_normalize")
         for i in range(0, 4):
             while self._current_time[i] >= self._CONSTS[i]:
                 self._current_time[i] -= self._CONSTS[i]
                 self._current_time[i+1] += 1
+        self._log(self.FUNCTION_RETURNED, "None")
         return None
 
+    def sync_time(self) -> None:
+        """
+        Uses datetime to sync with system clock
 
-def initializer() -> None:
-    # Takes the settings dictionary from settings.py and sets _SETTINGS_DICT equal to itself.
-    # Also checks for startCounting setting and syncOnStart settings and does the action needed for them
-    # IMPORTANT! Must not be run more than once because it starts a background thread, and if the thread is already
-    # running, it WILL give a RuntimeError
-    _log(FUNCTION_RAN, "initializer")
-    global _SETTINGS_DICT
-    _SETTINGS_DICT = settings.settingsDict
-    _ticking_thread.start()
-    if _SETTINGS_DICT["startCounting"]:
-        start_ticking()
-    if _SETTINGS_DICT["syncOnStart"]:
-        sync_time()
-    _log(FUNCTION_RETURNED, "None")
-    return None
+        Notes:
+            - This is the only time datetime module is used
+        """
+        self._log(self.FUNCTION_RAN, "syncTime")
+        now = datetime.now()
+        self._current_time[0] = now.second
+        self._current_time[1] = now.minute
+        self._current_time[2] = now.hour
+        self._current_time[3] = now.day + self._MONTH_OFFSETS[now.month]
+        self._current_time[4] = now.year
+        self._log(self.FUNCTION_RETURNED, "None")
+        return None
 
-def sync_time() -> None:
-    # Uses datetime.now() to sync to the current time. This is the only place datetime is used
-    _log(FUNCTION_RAN, "syncTime")
-    global _current_time
-    now = datetime.now()
-    _current_time[0] = now.second
-    _current_time[1] = now.minute
-    _current_time[2] = now.hour
-    _current_time[3] = now.day + _MONTH_OFFSETS[now.month]
-    _current_time[4] = now.year
-    _log(FUNCTION_RETURNED, "None")
-    return None
+    def initializer(self) -> None:
+        """
+        Takes the settings dictionary from settings.py and sets _SETTINGS_DICT equal to itself.
 
-def get_time(requested_time_unit: str) -> int or list:
-    # The main way of getting time from the library.
-    _log(FUNCTION_RAN, "getTime")
-    if requested_time_unit == "all":
-        requested_time = _current_time.copy()
-    elif requested_time_unit == "dom":
-        requested_time = _get_day()
-    elif requested_time_unit == "month":
-        requested_time = _get_month()
-    else:
+        Parameters:
+            No parameters
+
+        Notes:
+            - If ran more than once, logs will show a RuntimeError, but it will not be raised
+        """
+        self._log(self.FUNCTION_RAN, "initializer")
+        self._SETTINGS_DICT = settings.settingsDict
         try:
-            requested_time = _current_time[_KEYS[requested_time_unit]]
-        except KeyError:
-            _log(FUNCTION_RAISED, "KeyError in get_time")
-            raise KeyError(f"{requested_time_unit} is not a valid unit of time")
-    _log(FUNCTION_RETURNED, str(requested_time))
-    return requested_time
+            self._ticking_thread.start()
+        except RuntimeError:
+            self._log(self.FUNCTION_RAISED, "RuntimeError in initializer")
+        if self._SETTINGS_DICT["startCounting"]:
+            self.start_ticking()
+        if self._SETTINGS_DICT["syncOnStart"]:
+            self.sync_time()
+        self._log(self.FUNCTION_RETURNED, "None")
+        return None
 
-def set_time(newTime: list[int]) -> None:
-    # Gives the developer ability to set a custom time if needed.
-    _log(FUNCTION_RAN, "setTime")
-    global _current_time
-    if len(newTime) != 5:
-        _log(FUNCTION_RAISED, "Exception in set_time")
-        raise Exception("List provided is too big (bigger than 5)")
-    _current_time = newTime
-    _log(FUNCTION_RETURNED, "None")
-    return None
+    def get_time(self, requested_time_unit: str) -> int | list:
+        """
+        The default way to get time
 
-def _tick():
-    global _tickInterval
-    while True:
-        time.sleep(_SETTINGS_DICT["tickInterval"])
-        if _isTicking:
-            increase_time("sec", 1)
-_ticking_thread = threading.Thread(target=_tick, daemon=True)
-
-def increase_time(unit_type: str, amount: int) -> None:
-    # Gives the developer ability to increase time easily.
-    # Overflow is automatically converted.
-    # Negative amounts are not allowed.
-    _log(FUNCTION_RAN, "increaseTime")
-    if amount < 0:
-        _log(FUNCTION_RAISED, f"ValueError in increase_time, amount = {amount}  unit_type = {unit_type}")
-        raise ValueError("The value has to be bigger than zero")
-    try:
-        _current_time[_KEYS[unit_type]] += amount
-    except KeyError:
-        _log(FUNCTION_RAISED, f"KeyError in increase_time, unit_type = {unit_type}  amount = {amount}")
-        raise KeyError(f"{unit_type} is an invalid unit of time")
-    _normalize()
-    _log(FUNCTION_RETURNED, "None")
-    return None
-
-def start_ticking() -> None:
-    # Gives the dev an easy way to start ticking the clock.
-    _log(FUNCTION_RAN, "startTicking")
-    global _isTicking
-    _isTicking = True
-    _log(FUNCTION_RETURNED, "None")
-    return None
-
-def stop_ticking() -> None:
-    # Gives the dev an easy way to stop ticking the clock.
-    _log(FUNCTION_RAN, "stopTicking")
-    global _isTicking
-    _isTicking = False
-    _log(FUNCTION_RETURNED, "None")
-    return None
-
-def convert(convertFrom: int, fromType: str, convertTo: str) -> int:
-    #
-    _log(FUNCTION_RAN, "convert")
-    try:
-        converted = convertFrom
-        if _KEYS[fromType] < _KEYS[convertTo]:
-            for i in range(_KEYS[fromType], _KEYS[convertTo]):
-                converted /= _CONSTS[i]
-        elif _KEYS[fromType] > _KEYS[convertTo]:
-            for i in range(_KEYS[convertTo], _KEYS[fromType]):
-                converted *= _CONSTS[i]
-        elif _KEYS[fromType] == _KEYS[convertTo]:
-            _log(FUNCTION_RETURNED, str(converted))
-            return convertFrom
-    except KeyError:
-        _log(FUNCTION_RAISED, f"KeyError in convert, convertFrom = {convertFrom}  fromType = {fromType}  convertTo = {convertTo}")
-        raise KeyError(f"Either '{fromType}' or '{convertTo}' is an invalid time unit")
-    _log(FUNCTION_RETURNED, str(converted))
-    return converted
-
-def _get_day() -> int:
-    _log(FUNCTION_RAN, "_getDay")
-    month = _get_month()
-    day = _current_time[3] - _MONTH_OFFSETS[month]
-    _log(FUNCTION_RETURNED, str(day))
-    return day
-
-def _log(code: int, additional_info: str) -> None:
-    # Get the time to put into the log
-    seconds = _current_time[0]
-    minutes = _current_time[1]
-    hours = _current_time[2]
-    month = -1
-    for a in range(1, 13):
-        if (_MONTH_OFFSETS[a] < _current_time[3] and
-            _current_time[3] <= _MONTH_OFFSETS[a + 1]):
-            month = a
-    if month != -1:
-        day = _current_time[3] - _MONTH_OFFSETS[month]
-    else:
-        day = -1
-    year = _current_time[4]
-    # Use with to automatically close the file
-    with open("log.txt", "a") as log_file:
-        if code == 1:           # 1 means a function is called
-            log_file.write(f"{hours}:{minutes}:{seconds}, {day}/{month}/{year}, " + f"Executing {additional_info}\n")
-        elif code == 0:         # 0 means the function finished correctly and returned a value
-            log_file.write(f"{hours}:{minutes}:{seconds}, {day}/{month}/{year}, " + f"Function returned: {additional_info}\n")
-        elif code == -1:        # -1 means that an error was raised
-            log_file.write(f"{hours}:{minutes}:{seconds}, {day}/{month}/{year}, " + f"Function raised: {additional_info}\n")
-    return None
-
-def _get_month() -> int:
-    _log(FUNCTION_RAN, "_getMonth")
-    month = 13
-    if _current_time[3] < 0 or _current_time[3] > 366:
-        _log(FUNCTION_RAISED, f"ValueError in _get_month, _current_time = {_current_time}")
-        raise ValueError("Internal error happened")
-    for k in range(1, 13):
-        if _MONTH_OFFSETS[k] < _current_time[3] and _current_time[3] <= _MONTH_OFFSETS[k + 1]:
-            month = k
-    _log(FUNCTION_RETURNED, str(month))
-    return month
-
-def __decrease_time(unit_type: str, amount: int) -> None:
-    _log(FUNCTION_RAN, "__decrease_time")
-    # Not finished. Should not be used. I know, it is stupid
-    # TODO: fix
-    try:
-        _current_time[_KEYS[unit_type]] -= amount
-        while _current_time[_KEYS[unit_type]] < 0:
-            _current_time[_KEYS[unit_type] + 1] -= 1
-            _current_time[_KEYS[unit_type]] += _CONSTS[_KEYS[unit_type]]
-        while _current_time[_KEYS[unit_type] + 1] < 0:
-            _current_time[_KEYS[unit_type] + 2] -= 1
-            _current_time[_KEYS[unit_type] + 1] += _CONSTS[_KEYS[unit_type] + 1]
-        while _current_time[_KEYS[unit_type] + 2] < 0:
-            _current_time[_KEYS[unit_type] + 3] -= 1
-            _current_time[_KEYS[unit_type] + 2] += _CONSTS[_KEYS[unit_type] + 2]
-
-    except KeyError:
-        _log(FUNCTION_RAISED, f"KeyError in __decrease_time, unit_type = {unit_type}")
-        raise KeyError(f"{unit_type} is not a supported unit of time")
-    except IndexError:
-        _log(FUNCTION_RAISED, f"IndexError in __decrease_time, unit_time = {unit_type}")
-        raise IndexError("Only minutes, seconds and hours allowed")
-    _normalize()
-    _log(FUNCTION_RETURNED, "None")
-    return None
-
-def return_clk_style() -> str:
-    _log(FUNCTION_RAN, "return_clk_style")
-    day = _get_day()
-    month = _get_month()
-    timeNow = (str(_current_time[_KEYS["hour"]]) + ":" +
-               str(_current_time[_KEYS["min"]]) + ":" +
-               str(_current_time[_KEYS["sec"]]) + ", " +
-               str(day) + "/" +
-               str(month) + "/" +
-               str(_current_time[_KEYS["year"]]))
-    _log(FUNCTION_RETURNED, timeNow)
-    return timeNow
-
-def _normalize() -> None:
-    for i in range(0, 4):
-        if _current_time[i] >= _CONSTS[i]:
-            _current_time[i] -= _CONSTS[i]
-            _current_time[i + 1] += 1
-            _normalize()
-    _log(FUNCTION_RETURNED, "_initializer returned None")
-    return None
-
-def change_settings(name: str, value) -> None:
-    _log(FUNCTION_RAN, "changeSettings")
-    try:
-        _SETTINGS_DICT[name] = value
-    except KeyError:
-        _log(FUNCTION_RAISED, f"KeyError in change_settings, name = {name}  value = {value}")
-        raise KeyError(f"{name} does not exists as a settings")
-    with open("settings.py", "w") as f:
-        f.write("settingsDict = " + str(_SETTINGS_DICT))
-    _log(FUNCTION_RETURNED, "None")
-    return None
-
-
-# This is a basic CLI built into the library itself - used for quick tests
-if __name__ == "__main__":
-    initializer()
-    if _SETTINGS_DICT["doUnitTests"] == True:
-        overall_pass = True
-        passed1 = True
-        for i in range(0, 1250):
-            increase_time("sec", 1000)
-        for a in range(0, 4):
-            if _current_time[a] < _CONSTS[a] and _current_time[a] >= 0:
-                pass
-            else:
-                passed1, overall_pass = False, False
-        passed2 = True
-        i = 0
-        for i in range(0, 1200):
-            __decrease_time("sec", 1)
-        for a in range(0, 4):
-            if _current_time[a] < _CONSTS[a] and _current_time[a] >= 0:
-                pass
-            else:
-                passed2, overall_pass = False, False
-
-        passed3 = True
-        _current_time[3] = -1
-        month = _get_month()
-        if month != None:
-            passed3, overall_pass = False, False
-
-        passed4 = True
-        _current_time[3] = 370
-        month = _get_month()
-        if month != None:
-            passed4, overall_pass = False, False
-
-        passed5 = True
-        _current_time[3] = 200
-        day = _get_day()
-        if day != 19:
-            passed5, overall_pass = False, False
-
-        passed6 = True
-        var2 = convert(1, "day", "sec")
-        if var2 != 86400:
-            passed6, overall_pass = False, False
-
-        passed7 = True
-        var2 = convert(86400, "sec", "day")
-        if var2 != 1:
-            passed7, overall_pass = False, False
-
-        passed8 = True
-        var2 = convert(12, "sec", "sec")
-        if var2 != 12:
-            passed8, overall_pass = False, False
-
-        passed9 = False
-        try:
-            var2 = convert(10, "key", "another")
-        except KeyError:
-            passed9 = True
-        if passed9 == False:
-            overall_pass = False
-
-        if _SETTINGS_DICT["showTestOutput"] == True:
-            print("*** START OF UNIT TESTS ***")
-
-            print("Test 1 passed") if passed1 == True else print("Test 1 failed")
-            print("Test 2 passed") if passed2 == True else print("Test 2 failed")
-            print("Test 3 passed") if passed3 == True else print("Test 3 failed")
-            print("Test 4 passed") if passed4 == True else print("Test 4 failed")
-            print("Test 5 passed") if passed5 == True else print("Test 5 failed")
-            print("Test 6 passed") if passed6 == True else print("Test 6 failed")
-            print("Test 7 passed") if passed7 == True else print("Test 7 failed")
-            print("Test 8 passed") if passed8 == True else print("Test 8 failed")
-            print("Test 9 passed") if passed9 == True else print("Test 9 failed")
-            print("All tests passed") if overall_pass == True else print("A test/s failed, terminating program...")
-
-            print("*** END OF UNIT TESTS ***")
-
-    if _SETTINGS_DICT["doUnitTests"] == False:
-        overall_pass = True
-
-    if _SETTINGS_DICT["syncOnStart"] == True:
-        sync_time()
-
-    while overall_pass == True:
-        try:
-            ui = input("> ")
-        except KeyboardInterrupt:
-            print("""
-    Terminating program...""")
-            break
-        if ui == "print":
-            pass
-            #print_nicely()
-        elif ui == "increaseTime":
-            increase_time(input("type: "), int(input("amount: ")))
-        elif ui == "decreaseTime":
-            __decrease_time(input("type: "), int(input("amount: ")))
-        elif ui == "exit":
-            break
-        elif ui == "":
-            pass
-        elif ui == "sync":
-            sync_time()
-        elif ui == "clk":
-            print(return_clk_style())
-        elif ui == "startt":
-            start_ticking()
-        elif ui == "stopt":
-            stop_ticking()
-        elif ui == "convert":
-            var3 = convert(int(input("enter value ")), input("from "), input("to "))
-            print("result:", var3)
-        elif ui == "change":
-            change_settings(input(), input())
+        Parameters:
+             requested_time_unit (str):
+        """
+        # The main way of getting time from the library.
+        self._log(FUNCTION_RAN, "getTime")
+        if requested_time_unit == "all":
+            requested_time = self._current_time.copy()
+        elif requested_time_unit == "dom":
+            requested_time = self._get_day()
+        elif requested_time_unit == "month":
+            requested_time = self._get_month()
         else:
-            print("Not a command")
+            try:
+                requested_time = self._current_time[self._KEYS[requested_time_unit]]
+            except KeyError:
+                self._log(self.FUNCTION_RAISED, "KeyError in get_time")
+                raise KeyError(f"{requested_time_unit} is not a valid unit of time")
+        self._log(self.FUNCTION_RETURNED, f"get_time returned: {requested_time}")
+        return requested_time
+
+    def set_time(self, newTime: list[int]) -> None:
+        # Gives the developer ability to set a custom time if needed.
+        self._log(self.FUNCTION_RAN, "setTime")
+        if len(newTime) != 5:
+            self._log(self.FUNCTION_RAISED, "Exception in set_time")
+            raise Exception("List provided is too big (bigger than 5)")
+        self._current_time = newTime
+        self._log(self.FUNCTION_RETURNED, "None")
+        return None
+
+    def start_ticking(self) -> None:
+        # Gives the dev an easy way to start ticking the clock.
+        self._log(self.FUNCTION_RAN, "startTicking")
+        self._isTicking = True
+        self._log(self.FUNCTION_RETURNED, "None")
+        return None
+
+    def stop_ticking(self) -> None:
+        # Gives the dev an easy way to stop ticking the clock.
+        self._log(self.FUNCTION_RAN, "stopTicking")
+        self._isTicking = False
+        self._log(self.FUNCTION_RETURNED, "None")
+        return None
+
+    def convert(self, value: int, fromType: str, toType: str) -> float:
+        """
+        Returns converted value from one unit to the other one
+
+        Parameters:
+             value (int): Value to be converted
+             fromType (str): Unit type the value provided is in
+             toType (str): Unit type to convert the value to
+
+        Notes:
+            - If one or both units are not supported, a KeyError will be raised
+            - Supported units include: "sec", "min", "hour", "day", "year".
+            - "day" refers to the days that have passed in the current year
+        """
+        self._log(self.FUNCTION_RAN, "convert")
+        try:
+            converted = value
+            if self._KEYS[fromType] < self._KEYS[toType]:
+                for i in range(self._KEYS[fromType], self._KEYS[toType]):
+                    converted /= self._CONSTS[i]
+            elif self._KEYS[fromType] > self._KEYS[toType]:
+                for i in range(self._KEYS[toType], self._KEYS[fromType]):
+                    converted *= self._CONSTS[i]
+            elif self._KEYS[fromType] == self._KEYS[toType]:
+                self._log(self.FUNCTION_RETURNED, str(value))
+                return value
+        except KeyError:
+            self._log(self.FUNCTION_RAISED,
+        f"KeyError in convert, convertFrom = {value}  fromType = {fromType}  convertTo = {toType}")
+            raise KeyError(f"Either '{fromType}' or '{toType}' is an invalid time unit")
+        self._log(self.FUNCTION_RETURNED, f"{converted}")
+        return converted
+
+    def _get_day(self) -> int:
+        """
+        Returns day in the current month
+        """
+        self._log(self.FUNCTION_RAN, "_getDay")
+        month = self._get_month()
+        day = self._current_time[3] - self._MONTH_OFFSETS[month]
+        self._log(self.FUNCTION_RETURNED, f"{day}")
+        return day
+
+    def _get_month(self) -> int:
+        """
+        Returns the month based on how many days passed in this year
+
+        Parameters:
+             No parameters
+
+        Notes:
+            - If values in _current_time are outside their respective bounds,
+              a ValueError will be raised, and state of _current_time will be dumped to the log file
+        """
+        self._log(self.FUNCTION_RAN, "_getMonth")
+        month = 13
+        if self._current_time[3] < 0 or self._current_time[3] > 366:
+            self._log(self.FUNCTION_RAISED, f"ValueError in _get_month, _current_time = {_current_time}")
+            raise ValueError("Internal error happened")
+        for k in range(1, 13):
+            if (self._MONTH_OFFSETS[k] < self._current_time[3] and
+                    self._current_time[3] <= self._MONTH_OFFSETS[k + 1]):
+                month = k
+        self._log(self.FUNCTION_RETURNED, f"{month}")
+        return month
+
+    def decrease_time(self, unit_type: str, amount: int) -> None:
+        """
+        Decrease the current time by a given amount of a specified unit.
+
+        Parameters:
+            unit_type (str): The type of time unit (e.g., 'sec', 'min', 'hour').
+            amount (int): The amount to subtract from the current time.
+
+        Notes:
+            - The amount is converted to seconds internally.
+            - _current_time is updated by subtracting the amount in seconds.
+            - If _current_time becomes negative, it is normalized by
+              rolling over from the higher unit and adjusting accordingly.
+            - If amount to subtract is larger than total amount in _current_time,
+              years will become negative
+        """
+        self._log(self.FUNCTION_RAN, "decrease_time")
+        amount = self.convert(amount, unit_type, "sec")     # Convert to seconds, it is easier to work with them
+        self._current_time[self._KEYS["sec"]] -= amount
+        # Now we need to normalize time
+        for i in range(0, 4):
+            while self._current_time[i] < 0:
+                self._current_time[i] += self._CONSTS[i]
+                self._current_time[i+1] -= 1
+        self._log(self.FUNCTION_RETURNED, "None")
+        return None
+
+    def return_clk_style(self) -> str:
+        """
+        Return a clock-style string
+
+        Parameters:
+             No parameters
+
+        Notes:
+            - Returns a string that contains time formatted like this:
+              21:44:2, 19/1/2026
+            - The string is not zero-padded
+        """
+        self._log(self.FUNCTION_RAN, "return_clk_style")
+        day = self._get_day()
+        month = self._get_month()
+        timeNow = (str(self._current_time[self._KEYS["hour"]]) + ":" +
+                   str(self._current_time[self._KEYS["min"]]) + ":" +
+                   str(self._current_time[self._KEYS["sec"]]) + ", " +
+                   str(day) + "/" +
+                   str(month) + "/" +
+                   str(self._current_time[self._KEYS["year"]]))
+        self._log(self.FUNCTION_RETURNED, f"{timeNow}")
+        return timeNow
+
+    def change_settings(self, name: str, value: bool | float) -> None:
+        """
+        Allows the developer to change startup settings
+
+        Parameters:
+             name (str): The name of the setting
+             value (bool or float): The value that the setting will be set to
+
+        Notes:
+            - If the setting does not exist, a KeyError will be raised
+            - Disclaimer: if the write operation goes wrong, settings may become corrupted
+        """
+        self._log(self.FUNCTION_RAN, "changeSettings")
+        try:
+            self._SETTINGS_DICT[name] = value
+        except KeyError:
+            self._log(self.FUNCTION_RAISED, f"KeyError in change_settings, name = {name}  value = {value}")
+            raise KeyError(f"{name} does not exists as a settings")
+        with open("settings.py", "w") as f:
+            f.write("settingsDict = " + str(self._SETTINGS_DICT))
+        self._log(self.FUNCTION_RETURNED, "None")
+        return None
