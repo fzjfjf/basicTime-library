@@ -102,7 +102,8 @@ if True == True:
         print("Test 9 passed") if passed9 == True else print("Test 9 failed")
         print("Test 10 passed") if passed10 == True else print("Test 10 failed")
         print("Test 11 passed") if passed11 == True else print("Test 11 failed")
-        print("All tests passed") if overall_pass == True else print("A test/s failed, terminating program...")
+        print("All tests passed") if overall_pass == True else print("A test/s failed")
 
         print("*** END OF UNIT TESTS ***")
 input()
+
