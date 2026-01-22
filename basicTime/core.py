@@ -38,7 +38,6 @@ class Clock:
         self._current_time = [0, 0, 0, 0, 0]
         self._SETTINGS_DICT = {
             'default_time': [0, 0, 0, 0, 0],
-            'tick_interval': 1,
             'sync_on_start': False,
             'show_test_output': False,
             'do_unit_tests': False,
@@ -63,10 +62,14 @@ class Clock:
         return None
 
     def _tick(self):
+        starting_time = time.monotonic_ns()
         while True:
-            time.sleep(self._SETTINGS_DICT["tick_interval"])
-            if self._isTicking:
+            new_time = time.monotonic_ns()
+            if new_time - starting_time > 1000000000:
                 self.increase_time("sec", 1)
+                starting_time = new_time
+            time.sleep(0.001)
+
 
     def _log(self, info: str) -> None:
         """
@@ -78,6 +81,7 @@ class Clock:
         Notes:
             - When called, puts info in _log_buffer. Once length of _log_buffer is bigger than 10,
               it writes the strings into the log file.
+            - Formats time to put into the log by itself.
         """
         # Get the time to put into the log, can not use any other function,
         # because every other function calls _log, and then you would get
