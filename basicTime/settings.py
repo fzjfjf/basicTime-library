@@ -1,1 +1,1 @@
-settingsDict = {'default_time': [0, 1, 2, 3, 4], 'tickInterval': 1, 'syncOnStart': False, 'showTestOutput': False, 'doUnitTests': False, 'startCounting': False}
+settings_dict = {'default_time': [0, 0, 0, 0, 0], 'tick_interval': 1, 'sync_on_start': False, 'show_test_output': False, 'do_unit_tests': False, 'start_counting': False}

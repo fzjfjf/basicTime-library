@@ -7,5 +7,5 @@ Each function logs:
 - FUNCTION_RETURNED before returning
 - FUNCTION_RAISED on exception
 """
-from core import Clock
+from .core import Clock
 __all__ = ["Clock"]

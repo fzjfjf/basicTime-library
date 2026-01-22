@@ -1,8 +1,7 @@
 import time  #need this for counting seconds
 import threading
 from datetime import datetime   #need this for syncing with pc clock
-import settings
-
+from . import settings
 class Clock:
     """
     This module/class logs all function calls using self._log(FUNCTION_RAN/RAISED/RETURNED).
@@ -40,12 +39,12 @@ class Clock:
         # These are defaults for the clock
         self._current_time = [0, 0, 0, 0, 0]
         self._SETTINGS_DICT = {
-            "default_time": [0, 0, 0, 0, 0],
-            "tickInterval": 1,
-            "syncOnStart": False,
-            "showTestOutput": False,
-            "doUnitTests": False,
-            "startCounting": False
+            'default_time': [0, 0, 0, 0, 0],
+            'tick_interval': 1,
+            'sync_on_start': False,
+            'show_test_output': False,
+            'do_unit_tests': False,
+            'start_counting': False
         }
         self._ticking_thread = threading.Thread(
             target=self._tick,
@@ -56,7 +55,7 @@ class Clock:
 
     def _tick(self):
         while True:
-            time.sleep(self._SETTINGS_DICT["tickInterval"])
+            time.sleep(self._SETTINGS_DICT["tick_interval"])
             if self._isTicking:
                 self.increase_time("sec", 1)
 
@@ -159,14 +158,14 @@ class Clock:
             - If ran more than once, logs will show a RuntimeError, but it will not be raised
         """
         self._log(self.FUNCTION_RAN, "initializer")
-        self._SETTINGS_DICT = settings.settingsDict
+        self._SETTINGS_DICT = settings.settings_dict
         try:
             self._ticking_thread.start()
         except RuntimeError:
             self._log(self.FUNCTION_RAISED, "RuntimeError in initializer")
-        if self._SETTINGS_DICT["startCounting"]:
+        if self._SETTINGS_DICT["start_counting"]:
             self.start_ticking()
-        if self._SETTINGS_DICT["syncOnStart"]:
+        if self._SETTINGS_DICT["sync_on_start"]:
             self.sync_time()
         self._log(self.FUNCTION_RETURNED, "None")
         return None
@@ -179,7 +178,7 @@ class Clock:
              requested_time_unit (str):
         """
         # The main way of getting time from the library.
-        self._log(self.FUNCTION_RAN, "getTime")
+        self._log(self.FUNCTION_RAN, "get_time")
         if requested_time_unit == "all":
             requested_time = self._current_time.copy()
         elif requested_time_unit == "dom":
@@ -203,7 +202,7 @@ class Clock:
             newTime (list[int]): a list of 5 integers with the new time
 
         Notes:
-            - Exception will be raised if the lenght of the list is not five
+            - Exception will be raised if the length of the list is not five
             - New time is automatically normalized
             - Negative values are not supported
         """
@@ -226,7 +225,7 @@ class Clock:
         Easy way to start ticking the clock
         """
         # Gives the dev an easy way to start ticking the clock.
-        self._log(self.FUNCTION_RAN, "startTicking")
+        self._log(self.FUNCTION_RAN, "start_ticking")
         self._isTicking = True
         self._log(self.FUNCTION_RETURNED, "None")
         return None
@@ -236,7 +235,7 @@ class Clock:
         Easy way to stop the clock
         """
         # Gives the dev an easy way to stop ticking the clock.
-        self._log(self.FUNCTION_RAN, "stopTicking")
+        self._log(self.FUNCTION_RAN, "stop_ticking")
         self._isTicking = False
         self._log(self.FUNCTION_RETURNED, "None")
         return None
@@ -278,7 +277,7 @@ class Clock:
         """
         Returns day in the current month
         """
-        self._log(self.FUNCTION_RAN, "_getDay")
+        self._log(self.FUNCTION_RAN, "_get_day")
         month = self._get_month()
         day = self._current_time[3] - self._MONTH_OFFSETS[month]
         self._log(self.FUNCTION_RETURNED, f"{day}")
@@ -295,7 +294,7 @@ class Clock:
             - If values in _current_time are outside their respective bounds,
               a ValueError will be raised, and state of _current_time will be dumped to the log file
         """
-        self._log(self.FUNCTION_RAN, "_getMonth")
+        self._log(self.FUNCTION_RAN, "_get_month")
         month = 13
         if self._current_time[3] < 0 or self._current_time[3] > 366:
             self._log(self.FUNCTION_RAISED, f"ValueError in _get_month, _current_time = {self._current_time}")
@@ -370,12 +369,13 @@ class Clock:
             - If the setting does not exist, a KeyError will be raised
             - Disclaimer: if the write operation goes wrong, settings may become corrupted
         """
-        self._log(self.FUNCTION_RAN, "changeSettings")
+        self._log(self.FUNCTION_RAN, "change_settings")
         try:
-            self._SETTINGS_DICT[name] = value
+            some_value = self._SETTINGS_DICT[name]
         except KeyError:
             self._log(self.FUNCTION_RAISED, f"KeyError in change_settings, name = {name}  value = {value}")
             raise KeyError(f"{name} does not exists as a settings")
+        self._SETTINGS_DICT[name] = value
         with open("settings.py", "w") as f:
             f.write("settingsDict = " + str(self._SETTINGS_DICT))
         self._log(self.FUNCTION_RETURNED, "None")
