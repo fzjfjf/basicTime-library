@@ -1,5 +1,5 @@
+import math
 import time  #need this for counting seconds
-import threading
 from datetime import datetime   #need this for syncing with pc clock
 from . import settings
 import atexit
@@ -25,30 +25,34 @@ class Clock:
         12: 334,
         13: 366,
     }
-    _KEYS = {  # Contains index positions of the units. Made for easier use of current_time.
-        "sec": 0,
-        "min": 1,
-        "hour": 2,
-        "day": 3,
-        "year": 4,
-    }
+    _KEYS = ["seconds", "minutes", "hours", "day_in_year", "years"]
 
     def __init__(self):
         # These are defaults for the clock
-        self._current_time = [0, 0, 0, 0, 0]
+        self.starting_time = time.monotonic_ns()
+        self._current_time = {
+            "seconds": 0,
+            "minutes": 0,
+            "hours": 0,
+            "day_in_month": 0,
+            "day_in_year": 0,
+            "month": 0,
+            "years": 0,
+        }
         self._SETTINGS_DICT = {
-            'default_time': [0, 0, 0, 0, 0],
+            'default_time': {
+                "seconds": 0,
+                "minutes": 0,
+                "hours": 0,
+                "day_in_month": 0,
+                "day_in_year": 0,
+                "years": 0,
+            },
             'sync_on_start': False,
             'show_test_output': False,
             'do_unit_tests': False,
             'start_counting': False
         }
-        self._ticking_thread = threading.Thread(
-            target=self._tick,
-            daemon=True
-        )
-        self._ticking_thread.start()
-        self._isTicking = False
         self._log_buffer = []
         atexit.register(self._flush_log_buffer)
 
@@ -61,15 +65,15 @@ class Clock:
                 f.writelines(self._log_buffer)
         return None
 
-    def _tick(self):
-        starting_time = time.monotonic_ns()
-        while True:
-            new_time = time.monotonic_ns()
-            if new_time - starting_time > 1000000000:
-                self.increase_time("sec", 1)
-                starting_time = new_time
-            time.sleep(0.001)
-
+    def _calculate_time(self):
+        new_time = time.monotonic_ns()
+        elapsed = new_time - self.starting_time
+        if elapsed >= 1_000_000_000:
+            seconds_to_add = math.floor(elapsed // 1_000_000_000)
+        else:
+            seconds_to_add = 0
+        self.increase_time("seconds", seconds_to_add)
+        self.starting_time += seconds_to_add * 1_000_000_000
 
     def _log(self, info: str) -> None:
         """
@@ -83,23 +87,7 @@ class Clock:
               it writes the strings into the log file.
             - Formats time to put into the log by itself.
         """
-        # Get the time to put into the log, can not use any other function,
-        # because every other function calls _log, and then you would get
-        # an infinite recursion.
-        seconds = self._current_time[self._KEYS["sec"]]
-        minutes = self._current_time[self._KEYS["min"]]
-        hours = self._current_time[self._KEYS["hour"]]
-        month = -1
-        for a in range(1, 13):
-            if (self._MONTH_OFFSETS[a] < self._current_time[self._KEYS["day"]] and
-                self._current_time[self._KEYS["day"]] <= self._MONTH_OFFSETS[a + 1]):
-                month = a
-        if month != -1:
-            day = self._current_time[self._KEYS["day"]] - self._MONTH_OFFSETS[month]
-        else:
-            day = -1
-        year = self._current_time[self._KEYS["year"]]
-        time_to_put_into_log = f"{hours}:{minutes}:{seconds}, {day}/{month}/{year}  "
+        time_to_put_into_log = f"{self.return_clk_style()}  "
         # Put the info into log with the time
         self._log_buffer.append(time_to_put_into_log + info + "\n")
         length_of_buffer = len(self._log_buffer)
@@ -118,17 +106,12 @@ class Clock:
              - If unit_type does not exist, a KeyError will be raised
              - Runs normalize at the end
         """
-        self._log("Executing increase_time")
         if amount < 0:
-            self._log(f"ValueError in increase_time, amount = {amount}  unit_type = {unit_type}")
             raise ValueError("The value has to be bigger than zero")
-        try:
-            self._current_time[self._KEYS[unit_type]] += amount
-        except KeyError:
-            self._log(f"KeyError in increase_time, unit_type = {unit_type}  amount = {amount}")
-            raise KeyError(f"{unit_type} is an invalid unit of time")
+        if unit_type not in self._KEYS:
+            raise KeyError(f"{unit_type} is an invalid unit of time for increasing time")
+        self._current_time[unit_type] += amount
         self._normalize()
-        self._log("increase_time returned: None")
         return None
 
     def _normalize(self) -> None:
@@ -138,12 +121,12 @@ class Clock:
         Notes:
              - Does not work with negative values
         """
-        self._log("Executing: _normalize")
         for i in range(0, 4):
-            while self._current_time[i] >= self._CONSTS[i]:
-                self._current_time[i] -= self._CONSTS[i]
-                self._current_time[i+1] += 1
-        self._log("_normalize returned: None")
+            while self._current_time[self._KEYS[i]] >= self._CONSTS[i]:
+                self._current_time[self._KEYS[i]] -= self._CONSTS[i]
+                self._current_time[self._KEYS[i+1]] += 1
+        self._current_time["day_in_month"] = self._get_day()
+        self._current_time["month"] = self._get_month()
         return None
 
     def sync_time(self) -> None:
@@ -155,11 +138,13 @@ class Clock:
         """
         self._log("Executing: syncTime")
         now = datetime.now()
-        self._current_time[0] = now.second
-        self._current_time[1] = now.minute
-        self._current_time[2] = now.hour
-        self._current_time[3] = now.day + self._MONTH_OFFSETS[now.month]
-        self._current_time[4] = now.year
+        self._current_time["seconds"] = now.second
+        self._current_time["minutes"] = now.minute
+        self._current_time["hours"] = now.hour
+        self._current_time["day_in_year"] = now.day + self._MONTH_OFFSETS[now.month]
+        self._current_time["years"] = now.year
+        self._current_time["day_in_month"] = now.day
+        self._current_time["month"] = now.month
         self._log("sync_time returned: None")
         return None
 
@@ -169,18 +154,9 @@ class Clock:
 
         Parameters:
             No parameters
-
-        Notes:
-            - If ran more than once, logs will show a RuntimeError, but it will not be raised
         """
         self._log("Executing: initializer")
         self._SETTINGS_DICT = settings.settings_dict
-        try:
-            self._ticking_thread.start()
-        except RuntimeError:
-            self._log("RuntimeError in initializer")
-        if self._SETTINGS_DICT["start_counting"]:
-            self.start_ticking()
         if self._SETTINGS_DICT["sync_on_start"]:
             self.sync_time()
         self._log("initializer returned: None")
@@ -194,8 +170,8 @@ class Clock:
              requested_time_unit (str):
         """
         # The main way of getting time from the library.
-        self._log("Executing: get_time")
         if requested_time_unit == "all":
+            self._calculate_time()
             requested_time = self._current_time.copy()
         elif requested_time_unit == "dom":
             requested_time = self._get_day()
@@ -203,57 +179,27 @@ class Clock:
             requested_time = self._get_month()
         else:
             try:
-                requested_time = self._current_time[self._KEYS[requested_time_unit]]
+                requested_time = self._current_time[requested_time_unit]
             except KeyError:
-                self._log(f"KeyError in get_time, requested_time_unit = {requested_time_unit}")
                 raise KeyError(f"{requested_time_unit} is not a valid unit of time")
-        self._log(f"get_time returned: {requested_time}")
         return requested_time
 
-    def set_time(self, new_time: list[int]) -> None:
+    def set_time(self, new_time: dict[int]) -> None:
         """
-        Gives the developer an easy way to set a custom time while the program is runnning
+        Gives the developer an easy way to set a custom time while the program is running
 
         Parameters:
-            new_time (list[int]): a list of 5 integers with the new time
+            new_time (dict[int]): a dict with the new time
 
         Notes:
-            - Exception will be raised if the length of the list is not five
             - New time is automatically normalized
-            - Negative values are not supported
         """
-        # Gives the developer ability to set a custom time if needed.
         self._log("Executing: set_time")
-        for i in range(0, 5):
-            if new_time[i] < 0:
-                self._log(f"ValueError in set_time, newTime = {new_time}")
-                raise ValueError("The new time provided contains a negative value")
-        if len(new_time) != 5:
-            self._log(f"Exception in set_time, new_time = {new_time}")
-            raise Exception("List provided is not the right size (5)")
+        #TODO: ADD CHECKING OF NEW TIME
+
         self._current_time = new_time
         self._normalize()
         self._log("set_time returned: None")
-        return None
-
-    def start_ticking(self) -> None:
-        """
-        Easy way to start ticking the clock
-        """
-        # Gives the dev an easy way to start ticking the clock.
-        self._log("Executing: start_ticking")
-        self._isTicking = True
-        self._log("start_ticking returned: None")
-        return None
-
-    def stop_ticking(self) -> None:
-        """
-        Easy way to stop the clock
-        """
-        # Gives the dev an easy way to stop ticking the clock.
-        self._log("Executiong: stop_ticking")
-        self._isTicking = False
-        self._log("stop_ticking returned: None")
         return None
 
     def convert(self, value: int, fromType: str, toType: str) -> float:
@@ -267,19 +213,25 @@ class Clock:
 
         Notes:
             - If one or both units are not supported, a KeyError will be raised
-            - Supported units include: "sec", "min", "hour", "day", "year".
-            - "day" refers to the days that have passed in the current year
+            - Supported units include: "seconds", "minutes", "hours", "days", "years".
         """
+        _a_dict = {
+            "seconds": 0,
+            "minutes": 1,
+            "hours": 2,
+            "days": 3,
+            "years": 4,
+        }
         self._log("Executing: convert")
         try:
             converted = value
-            if self._KEYS[fromType] < self._KEYS[toType]:
-                for i in range(self._KEYS[fromType], self._KEYS[toType]):
-                    converted /= self._CONSTS[i]
-            elif self._KEYS[fromType] > self._KEYS[toType]:
-                for i in range(self._KEYS[toType], self._KEYS[fromType]):
-                    converted *= self._CONSTS[i]
-            elif self._KEYS[fromType] == self._KEYS[toType]:
+            if _a_dict[fromType] > _a_dict[toType]:
+                for i in range(_a_dict[fromType], _a_dict[toType]):
+                    converted *= self._CONSTS[_a_dict[toType]]
+            elif _a_dict[fromType] < _a_dict[toType]:
+                for i in range(_a_dict[fromType], _a_dict[toType]):
+                    converted /= self._CONSTS[_a_dict[toType]]
+            elif fromType == toType:
                 self._log(f"converted returned: {value}")
                 return value
         except KeyError:
@@ -292,10 +244,8 @@ class Clock:
         """
         Returns day in the current month
         """
-        self._log("Executing: _get_day")
         month = self._get_month()
-        day = self._current_time[3] - self._MONTH_OFFSETS[month]
-        self._log(f"_get_day returned: {day}")
+        day = self._current_time["day_in_year"] - self._MONTH_OFFSETS[month]
         return day
 
     def _get_month(self) -> int:
@@ -309,16 +259,13 @@ class Clock:
             - If values in _current_time are outside their respective bounds,
               a ValueError will be raised, and state of _current_time will be dumped to the log file
         """
-        self._log("Executing: _get_month")
         month = 13
-        if self._current_time[3] < 0 or self._current_time[3] > 366:
-            self._log(f"ValueError in _get_month, _current_time = {self._current_time}")
+        if self._current_time["day_in_year"] < 0 or self._current_time["day_in_year"] > 366:
             raise ValueError("Internal error happened")
         for k in range(1, 13):
-            if (self._MONTH_OFFSETS[k] < self._current_time[3] and
-                    self._current_time[3] <= self._MONTH_OFFSETS[k + 1]):
+            if (self._MONTH_OFFSETS[k] < self._current_time["day_in_year"] and
+                    self._current_time["day_in_year"] <= self._MONTH_OFFSETS[k + 1]):
                 month = k
-        self._log(f"_get_month returned: {month}")
         return month
 
     def decrease_time(self, unit_type: str, amount: int) -> None:
@@ -338,8 +285,8 @@ class Clock:
               years will become negative
         """
         self._log("Executing: decrease_time")
-        amount = self.convert(amount, unit_type, "sec")     # Convert to seconds, it is easier to work with them
-        self._current_time[self._KEYS["sec"]] -= amount
+        amount = self.convert(amount, unit_type, "seconds")     # Convert to seconds, it is easier to work with them
+        self._current_time["seconds"] -= amount
         # Now we need to normalize time
         for i in range(0, 4):
             while self._current_time[i] < 0:
@@ -360,17 +307,9 @@ class Clock:
               21:44:2, 19/1/2026
             - The string is not zero-padded
         """
-        self._log("Executing: return_clk_style")
-        day = self._get_day()
-        month = self._get_month()
-        timeNow = (str(self._current_time[self._KEYS["hour"]]) + ":" +
-                   str(self._current_time[self._KEYS["min"]]) + ":" +
-                   str(self._current_time[self._KEYS["sec"]]) + ", " +
-                   str(day) + "/" +
-                   str(month) + "/" +
-                   str(self._current_time[self._KEYS["year"]]))
-        self._log(f"return_clk_style returned: {timeNow}")
-        return timeNow
+        new_time = self.get_time("all")
+        time_now = f"{new_time['hours']}:{new_time['minutes']}:{new_time['seconds']}, {new_time['day_in_month']}/{new_time['month']}/{new_time['years']}"
+        return time_now
 
     def change_settings(self, name: str, value: bool | float) -> None:
         """
